@@ -38,6 +38,8 @@ export default function SearchExperience() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoLocateAttempted, setAutoLocateAttempted] = useState(false);
+  const [autoLocationActive, setAutoLocationActive] = useState(true);
 
   const fetchResults = async (limit = 50) => {
     setLoading(true);
@@ -64,10 +66,13 @@ export default function SearchExperience() {
       if (!response.ok) {
         throw new Error(data.error || "Search failed");
       }
-      setResults(data.results ?? []);
+      const nextResults = data.results ?? [];
+      setResults(nextResults);
+      return nextResults as SearchResult[];
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Search failed";
       setError(message);
+      return [] as SearchResult[];
     } finally {
       setLoading(false);
     }
@@ -76,6 +81,43 @@ export default function SearchExperience() {
   useEffect(() => {
     fetchResults(DEFAULT_LIMIT);
   }, []);
+
+  useEffect(() => {
+    if (autoLocateAttempted) return;
+    if (!navigator.geolocation) return;
+    setAutoLocateAttempted(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const params = new URLSearchParams({
+            lat: String(pos.coords.latitude),
+            lon: String(pos.coords.longitude),
+          });
+          const res = await fetch(`/api/reverse?${params.toString()}`);
+          const data = await res.json();
+          if (data?.state) {
+            setState(data.state);
+          }
+          if (data?.placeName) {
+            setCity(data.placeName);
+          }
+          await fetchResults(DEFAULT_LIMIT);
+        } catch {
+          // ignore geolocation errors
+        }
+      },
+      () => {
+        // ignore location deny
+      },
+      { timeout: 5000 }
+    );
+  }, [autoLocateAttempted]);
+
+  useEffect(() => {
+    if (!autoLocationActive) return;
+    if (query || city || state !== "all" || zip || address) return;
+    fetchResults(DEFAULT_LIMIT);
+  }, [autoLocationActive, query, city, state, zip, address]);
 
   const resetFilters = () => {
     setQuery("");
@@ -174,9 +216,18 @@ export default function SearchExperience() {
           <input
             placeholder="City"
             value={city}
-            onChange={(event) => setCity(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setCity(event.target.value);
+            }}
           />
-          <select value={state} onChange={(event) => setState(event.target.value)}>
+          <select
+            value={state}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setState(event.target.value);
+            }}
+          >
             <option value="all">All states</option>
             {STATE_OPTIONS.map((option) => (
               <option key={option.code} value={option.code}>
@@ -187,62 +238,109 @@ export default function SearchExperience() {
           <input
             placeholder="ZIP"
             value={zip}
-            onChange={(event) => setZip(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setZip(event.target.value);
+            }}
           />
           <input
             placeholder="Address"
             value={address}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setAddress(event.target.value);
+            }}
           />
           <input
             placeholder="Any keyword"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setQuery(event.target.value);
+            }}
           />
           <input
             placeholder="Min beds"
             value={minBeds}
-            onChange={(event) => setMinBeds(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMinBeds(event.target.value);
+            }}
           />
           <input
             placeholder="Max beds"
             value={maxBeds}
-            onChange={(event) => setMaxBeds(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMaxBeds(event.target.value);
+            }}
           />
           <input
             placeholder="Min baths"
             value={minBaths}
-            onChange={(event) => setMinBaths(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMinBaths(event.target.value);
+            }}
           />
           <input
             placeholder="Max baths"
             value={maxBaths}
-            onChange={(event) => setMaxBaths(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMaxBaths(event.target.value);
+            }}
           />
           <input
             placeholder="Min units"
             value={minUnits}
-            onChange={(event) => setMinUnits(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMinUnits(event.target.value);
+            }}
           />
           <input
             placeholder="Max units"
             value={maxUnits}
-            onChange={(event) => setMaxUnits(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMaxUnits(event.target.value);
+            }}
           />
           <input
             placeholder="Min price"
             value={minPrice}
-            onChange={(event) => setMinPrice(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMinPrice(event.target.value);
+            }}
           />
           <input
             placeholder="Max price"
             value={maxPrice}
-            onChange={(event) => setMaxPrice(event.target.value)}
+            onChange={(event) => {
+              setAutoLocationActive(false);
+              setMaxPrice(event.target.value);
+            }}
           />
         </div>
         <div className="toggle-row">
           <button onClick={() => fetchResults()} disabled={loading}>
             {loading ? "Searching..." : "Search"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAutoLocationActive(true);
+              setQuery("");
+              setCity("");
+              setState("all");
+              setZip("");
+              setAddress("");
+              fetchResults(DEFAULT_LIMIT);
+            }}
+          >
+            Use My Location
           </button>
           <button onClick={resetFilters} type="button">
             Reset
@@ -272,78 +370,81 @@ export default function SearchExperience() {
         </section>
       )}
 
-      <div className="grid grid-2" style={{ marginTop: "24px" }}>
-        <div className="grid" style={{ gap: "16px" }}>
-          {rankedResults.map((ranked, index) => (
-            <Link
-              key={ranked.property.id}
-              href={`/property/${ranked.property.id}`}
-              className="card"
-            >
-              <img
-                src={getPropertyImage(ranked.property)}
-                alt={`${ranked.property.address} listing`}
-              />
-              <div>
-                <span className="badge">
-                  Rank #{index + 1} · {ranked.score.grade} ({ranked.score.total})
-                </span>
-              </div>
-              <div>
-                <strong>{ranked.property.address}</strong>
-                <div className="tag">
-                  {ranked.property.city}, {ranked.property.state} {ranked.property.zip}
-                </div>
-              </div>
-              <div className="stat-grid">
-                <div className="stat">
-                  <span>Beds</span>
-                  <strong>{ranked.property.beds ?? "Est."}</strong>
-                </div>
-                <div className="stat">
-                  <span>Baths</span>
-                  <strong>{ranked.property.baths ?? "Est."}</strong>
-                </div>
-                <div className="stat">
-                  <span>Sq Ft</span>
-                  <strong>{ranked.property.sqft ?? "Est."}</strong>
-                </div>
-                <div className="stat">
-                  <span>Units</span>
-                  <strong>{ranked.property.units ?? "—"}</strong>
-                </div>
-              </div>
-              <div className="stat-grid">
-                <div className="stat">
-                  <span>Price</span>
-                  <strong>${ranked.property.price.toLocaleString()}</strong>
-                </div>
-                <div className="stat">
-                  <span>Cash Flow</span>
-                  <strong>${Math.round(ranked.finance.monthlyCashFlow).toLocaleString()}</strong>
-                </div>
-              </div>
-              <div className="tag">
-                Source: {ranked.property.source ?? "Public record"}
-              </div>
-            </Link>
-          ))}
-          {results.length === 0 && !loading && (
-            <div className="card">
-              <strong>Start by searching a U.S. city or ZIP.</strong>
-              <p>
-                Run `npm run ingest` to load the free public dataset, then search for
-                Connecticut towns like Hartford or New Haven.
-              </p>
-            </div>
-          )}
+      <div className="results-layout" style={{ marginTop: "24px" }}>
+        <div className="cards-column">
+          {renderCards(rankedResults.filter((_, index) => index % 2 === 0))}
         </div>
-        <div className="map-shell">
-          <MapView properties={results} />
+        <div className="map-column">
+          <div className="map-shell">
+            <MapView properties={results} />
+          </div>
+          <div className="cards-column">
+            {renderCards(rankedResults.filter((_, index) => index % 2 === 1))}
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+function renderCards(items: RankedResult[]) {
+  if (items.length === 0) {
+    return (
+      <div className="card">
+        <strong>Start by searching a U.S. city or ZIP.</strong>
+        <p>
+          Run `npm run ingest` to load the free public dataset, then search for
+          Connecticut towns like Hartford or New Haven.
+        </p>
+      </div>
+    );
+  }
+
+  return items.map((ranked, index) => (
+    <Link key={ranked.property.id} href={`/property/${ranked.property.id}`} className="card">
+      <img src={getPropertyImage(ranked.property)} alt={`${ranked.property.address} listing`} />
+      <div>
+        <span className="badge">
+          Rank #{index + 1} · {ranked.score.grade} ({ranked.score.total})
+        </span>
+      </div>
+      <div>
+        <strong>{ranked.property.address}</strong>
+        <div className="tag">
+          {ranked.property.city}, {ranked.property.state} {ranked.property.zip}
+        </div>
+      </div>
+      <div className="stat-grid">
+        <div className="stat">
+          <span>Beds</span>
+          <strong>{ranked.property.beds ?? "Est."}</strong>
+        </div>
+        <div className="stat">
+          <span>Baths</span>
+          <strong>{ranked.property.baths ?? "Est."}</strong>
+        </div>
+        <div className="stat">
+          <span>Sq Ft</span>
+          <strong>{ranked.property.sqft ?? "Est."}</strong>
+        </div>
+        <div className="stat">
+          <span>Units</span>
+          <strong>{ranked.property.units ?? "—"}</strong>
+        </div>
+      </div>
+      <div className="stat-grid">
+        <div className="stat">
+          <span>Price</span>
+          <strong>${ranked.property.price.toLocaleString()}</strong>
+        </div>
+        <div className="stat">
+          <span>Cash Flow</span>
+          <strong>${Math.round(ranked.finance.monthlyCashFlow).toLocaleString()}</strong>
+        </div>
+      </div>
+      <div className="tag">Source: {ranked.property.source ?? "Public record"}</div>
+    </Link>
+  ));
 }
 
 function deriveAssumptions(property: SearchResult, cityMedianPrice: number) {

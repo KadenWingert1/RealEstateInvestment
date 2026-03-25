@@ -20,6 +20,8 @@ This app intentionally uses **free, public U.S. datasets**. The default ingest p
 
 - **Connecticut Real Estate Sales (OPM)** — statewide property sales transactions with address, sale price, sale date, and property type.
 - **NYC Rolling Sales (Department of Finance)** — property sales transactions with address, sale price, and building class.
+- **Philadelphia Real Estate Transfers (Department of Records)** — real estate transfer records via Carto SQL API.
+- **Cook County Property Sales (IL)** — public sales records for Cook County via Socrata.
 - **Iowa City Sales (Assessor)** — Iowa City assessor sales records.
 - **Pottawattamie County Assessor Sales (IA)** — county assessor sale records.
 - **U.S. Census Geocoder** — free geocoding service used to get latitude/longitude from addresses.

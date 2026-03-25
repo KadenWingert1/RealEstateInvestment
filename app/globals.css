@@ -217,6 +217,23 @@ button:hover {
   height: 420px;
 }
 
+.results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.cards-column {
+  display: grid;
+  gap: 16px;
+}
+
+.map-column {
+  display: grid;
+  gap: 20px;
+}
+
 .toggle-row {
   display: flex;
   gap: 10px;
@@ -249,25 +266,34 @@ button:hover {
 }
 
 .help {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #1f2937;
-  font-size: 0.75rem;
+  border: 1px solid #cbd5f5;
+  color: #334155;
+  background: #ffffff;
+  font-size: 11px;
   font-weight: 700;
   margin-left: 6px;
   position: relative;
   cursor: help;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  line-height: 1;
+  font-family: inherit;
+  vertical-align: middle;
+  padding: 0;
+  text-align: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
+
 
 .help::after {
   content: attr(data-tip);
   position: absolute;
-  bottom: 130%;
+  bottom: 140%;
   left: 50%;
   transform: translateX(-50%);
   background: #111827;
@@ -284,8 +310,59 @@ button:hover {
   z-index: 10;
 }
 
+.help::before {
+  content: "";
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #111827;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
 .help:hover::after {
   opacity: 1;
+}
+
+.help:hover::before {
+  opacity: 1;
+}
+
+.input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.input-group input {
+  width: 100%;
+}
+
+.input-group.has-suffix input {
+  padding-right: 36px;
+}
+
+.input-group.has-prefix input {
+  padding-left: 28px;
+}
+
+.input-prefix,
+.input-suffix {
+  position: absolute;
+  font-size: 0.75rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.input-prefix {
+  left: 10px;
+}
+
+.input-suffix {
+  right: 10px;
 }
 
 .table {
@@ -317,6 +394,20 @@ button:hover {
 
 @media (max-width: 720px) {
   .search-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cards-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .cards-column {
     grid-template-columns: 1fr;
   }
 }

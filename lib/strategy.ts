@@ -17,6 +17,7 @@ export type StrategyInputs = {
   units: number | null;
   refinanceLtv: number;
   sellingCostPct: number;
+  preferredStrategy?: StrategyRecommendation["name"];
 };
 
 export function recommendStrategies(inputs: StrategyInputs): StrategyRecommendation[] {
@@ -127,6 +128,15 @@ export function recommendStrategies(inputs: StrategyInputs): StrategyRecommendat
       "Projected Profit": `$${Math.round(flipProfit).toLocaleString()}`,
     },
   });
+
+  if (inputs.preferredStrategy) {
+    for (const recommendation of recommendations) {
+      if (recommendation.name === inputs.preferredStrategy) {
+        recommendation.score = Math.min(100, recommendation.score + 8);
+        recommendation.reasoning.unshift("Aligned with your selected buying plan.");
+      }
+    }
+  }
 
   return recommendations.sort((a, b) => b.score - a.score);
 }

@@ -6,7 +6,7 @@ import type { Property } from "@/lib/types";
 import { computeFinance, DEFAULTS, DEFAULT_PROJECTION } from "@/lib/finance";
 import { estimateRehabCost, estimateSqft, type RehabLevel } from "@/lib/estimates";
 import { computeInvestorScore, type CityStats } from "@/lib/ranking";
-import { recommendStrategies } from "@/lib/strategy";
+import { recommendStrategies, type StrategyRecommendation } from "@/lib/strategy";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -21,10 +21,13 @@ export default function PropertyDetail({
   property: Property;
   cityStats: CityStats;
 }) {
+  type PurchasePlan = "conventional" | "cash" | "fha" | "hardMoney" | "brrrr";
+
   const [marketEstimate, setMarketEstimate] = useState<Record<string, unknown> | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const inferredSqft = property.sqft ?? estimateSqft(property.price);
   const [rehabLevel, setRehabLevel] = useState<RehabLevel>("moderate");
+  const [purchasePlan, setPurchasePlan] = useState<PurchasePlan>("conventional");
   const [assumptions, setAssumptions] = useState({
     downPaymentPct: DEFAULTS.downPaymentPct,
     interestRate: DEFAULTS.interestRate,
@@ -45,6 +48,65 @@ export default function PropertyDetail({
     arvPremium: 0.15,
     rehabCostOverride: null as number | null,
   });
+
+  const preferredStrategy: StrategyRecommendation["name"] = useMemo(() => {
+    switch (purchasePlan) {
+      case "brrrr":
+        return "BRRRR";
+      case "fha":
+        return "House Hacking";
+      case "hardMoney":
+        return "Fix and Flip";
+      case "cash":
+        return "Buy and Hold";
+      default:
+        return "Buy and Hold";
+    }
+  }, [purchasePlan]);
+
+  const applyPlanPreset = (plan: PurchasePlan) => {
+    if (plan === "cash") {
+      setAssumptions((current) => ({
+        ...current,
+        downPaymentPct: 1,
+        interestRate: 0,
+      }));
+      return;
+    }
+    if (plan === "fha") {
+      setAssumptions((current) => ({
+        ...current,
+        downPaymentPct: 0.035,
+        interestRate: Math.max(current.interestRate, 0.065),
+        loanTermYears: 30,
+      }));
+      return;
+    }
+    if (plan === "hardMoney") {
+      setAssumptions((current) => ({
+        ...current,
+        downPaymentPct: 0.25,
+        interestRate: Math.max(current.interestRate, 0.1),
+        loanTermYears: 5,
+      }));
+      return;
+    }
+    if (plan === "brrrr") {
+      setAssumptions((current) => ({
+        ...current,
+        downPaymentPct: 0.2,
+        interestRate: Math.max(current.interestRate, 0.075),
+        loanTermYears: 30,
+      }));
+      return;
+    }
+    setAssumptions((current) => ({
+      ...current,
+      downPaymentPct: 0.2,
+      interestRate: Math.max(current.interestRate, 0.065),
+      loanTermYears: 30,
+    }));
+  };
 
   const rehabCost =
     assumptions.rehabCostOverride ?? estimateRehabCost(inferredSqft, rehabLevel);
@@ -95,8 +157,9 @@ export default function PropertyDetail({
         units: property.units,
         refinanceLtv: assumptions.refinanceLtv,
         sellingCostPct: assumptions.sellingCostPct,
+        preferredStrategy,
       }),
-    [property, finance, rehabCost, arv, assumptions.refinanceLtv, assumptions.sellingCostPct]
+    [property, finance, rehabCost, arv, assumptions.refinanceLtv, assumptions.sellingCostPct, preferredStrategy]
   );
 
   useEffect(() => {
@@ -215,37 +278,70 @@ export default function PropertyDetail({
         <div className="card">
           <div className="stat-grid">
             <label>
+              Buying Plan
+              <select
+                value={purchasePlan}
+                onChange={(event) => {
+                  const plan = event.target.value as PurchasePlan;
+                  setPurchasePlan(plan);
+                  applyPlanPreset(plan);
+                }}
+              >
+                <option value="conventional">Conventional mortgage</option>
+                <option value="cash">All-cash purchase</option>
+                <option value="fha">FHA / owner-occupy</option>
+                <option value="hardMoney">Hard money / private</option>
+                <option value="brrrr">BRRRR refinance plan</option>
+              </select>
+            </label>
+            <label>
               Down Payment %
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.downPaymentPct}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    downPaymentPct: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.downPaymentPct * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      downPaymentPct: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 1) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Interest Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.interestRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    interestRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={Number((assumptions.interestRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      interestRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.4) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Loan Term (years)
               <input
                 type="number"
+                min="1"
+                max="40"
                 value={assumptions.loanTermYears}
                 onChange={(event) =>
                   setAssumptions({
@@ -257,87 +353,129 @@ export default function PropertyDetail({
             </label>
             <label>
               Rent-to-Price Ratio
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.rentRatio}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    rentRatio: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0.1"
+                  max="3"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={Number((assumptions.rentRatio * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      rentRatio: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.1) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Property Tax Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.taxRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    taxRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={Number((assumptions.taxRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      taxRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.2) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Insurance Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.insuranceRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    insuranceRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={Number((assumptions.insuranceRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      insuranceRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.1) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Maintenance Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.maintenanceRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    maintenanceRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={Number((assumptions.maintenanceRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      maintenanceRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.2) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Vacancy Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.vacancyRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    vacancyRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.vacancyRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      vacancyRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.8) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Management Rate
-              <input
-                type="number"
-                step="0.001"
-                value={assumptions.managementRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    managementRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.managementRate * 100).toFixed(2))}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setAssumptions({
+                      ...assumptions,
+                      managementRate: Number.isFinite(value) ? Math.min(Math.max(value / 100, 0), 0.5) : 0,
+                    });
+                  }}
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Include Management
@@ -372,35 +510,48 @@ export default function PropertyDetail({
             </label>
             <label>
               Rehab Cost Override
-              <input
-                type="number"
-                value={assumptions.rehabCostOverride ?? rehabCost}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    rehabCostOverride: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-prefix">
+                <span className="input-prefix">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={assumptions.rehabCostOverride ?? rehabCost}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      rehabCostOverride: Number(event.target.value),
+                    })
+                  }
+                />
+              </div>
             </label>
             <label>
               ARV Premium
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.arvPremium}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    arvPremium: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.arvPremium * 100).toFixed(2))}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      arvPremium: Number(event.target.value) / 100,
+                    })
+                  }
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Hold Period (years)
               <input
                 type="number"
+                min="1"
+                max="40"
                 value={assumptions.holdYears}
                 onChange={(event) =>
                   setAssumptions({
@@ -412,59 +563,83 @@ export default function PropertyDetail({
             </label>
             <label>
               Appreciation Rate
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.appreciationRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    appreciationRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="-10"
+                  max="20"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.appreciationRate * 100).toFixed(2))}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      appreciationRate: Number(event.target.value) / 100,
+                    })
+                  }
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Rent Growth Rate
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.rentGrowthRate}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    rentGrowthRate: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="-5"
+                  max="15"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.rentGrowthRate * 100).toFixed(2))}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      rentGrowthRate: Number(event.target.value) / 100,
+                    })
+                  }
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Selling Costs %
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.sellingCostPct}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    sellingCostPct: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="15"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.sellingCostPct * 100).toFixed(2))}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      sellingCostPct: Number(event.target.value) / 100,
+                    })
+                  }
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
             <label>
               Refi LTV
-              <input
-                type="number"
-                step="0.01"
-                value={assumptions.refinanceLtv}
-                onChange={(event) =>
-                  setAssumptions({
-                    ...assumptions,
-                    refinanceLtv: Number(event.target.value),
-                  })
-                }
-              />
+              <div className="input-group has-suffix">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={Number((assumptions.refinanceLtv * 100).toFixed(2))}
+                  onChange={(event) =>
+                    setAssumptions({
+                      ...assumptions,
+                      refinanceLtv: Number(event.target.value) / 100,
+                    })
+                  }
+                />
+                <span className="input-suffix">%</span>
+              </div>
             </label>
           </div>
         </div>
@@ -514,7 +689,7 @@ export default function PropertyDetail({
                 IRR (Hold Period)
                 <span className="help" data-tip="Internal rate of return over the selected hold period.">?</span>
               </span>
-              <strong>{formatPercent(finance.irr)}</strong>
+              <strong>{formatPercent(finance.irr, 2)}</strong>
             </div>
             <div className="stat">
               <span>
@@ -534,8 +709,7 @@ export default function PropertyDetail({
         </div>
         <div className="card">
           <h3>Market Estimate (ZipMarketData)</h3>
-          {estimateError && <div className="notice">{estimateError}</div>}
-          {!estimateError && marketEstimate && (
+          {marketEstimate && (
             <div className="stat-grid">
               {renderEstimateStats(marketEstimate).map((stat) => (
                 <div key={stat.label} className="stat">
@@ -545,7 +719,10 @@ export default function PropertyDetail({
               ))}
             </div>
           )}
-          {!estimateError && !marketEstimate && (
+          {!marketEstimate && estimateError && (
+            <div className="notice">{estimateError}</div>
+          )}
+          {!marketEstimate && !estimateError && (
             <div className="tag">Loading estimate...</div>
           )}
         </div>

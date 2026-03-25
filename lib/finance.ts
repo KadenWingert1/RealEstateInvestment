@@ -162,14 +162,23 @@ export function internalRateOfReturn(cashflows: number[], guess = 0.1) {
   for (let i = 0; i < 100; i += 1) {
     const { npv, derivative } = npvWithDerivative(cashflows, rate);
     if (Math.abs(npv) < 1e-6) {
-      return rate;
+      return clampIrr(rate);
     }
     if (derivative === 0) {
       break;
     }
     rate -= npv / derivative;
+    if (!Number.isFinite(rate)) {
+      return 0;
+    }
+    if (rate <= -0.95) {
+      rate = -0.95;
+    }
+    if (rate > 2) {
+      rate = 2;
+    }
   }
-  return rate;
+  return clampIrr(rate);
 }
 
 function npvWithDerivative(cashflows: number[], rate: number) {
@@ -183,4 +192,9 @@ function npvWithDerivative(cashflows: number[], rate: number) {
     }
   });
   return { npv, derivative };
+}
+
+function clampIrr(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(2, Math.max(-0.95, value));
 }
