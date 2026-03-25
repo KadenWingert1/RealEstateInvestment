@@ -1,0 +1,28 @@
+{
+  "name": "real-estate-investor-zillow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "ingest": "node scripts/ingest.mjs",
+    "test": "tsx --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.1.0",
+    "leaflet": "^1.9.4",
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.15.7",
+    "typescript": "^5.6.2"
+  }
+}
